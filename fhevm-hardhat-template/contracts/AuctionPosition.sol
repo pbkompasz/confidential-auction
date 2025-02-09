@@ -11,9 +11,8 @@ contract AuctionPosition is ERC721 {
     address factoryAddress;
     address winnerAddress;
 
-    constructor(address _factoryAddress, address _winnerAddress) ERC721("AuctionHouse", "ACT-P") {
+    constructor(address _factoryAddress) ERC721("AuctionHouse", "ACT-P") {
         factoryAddress = _factoryAddress;
-        winnerAddress = _winnerAddress;
     }
 
     // TODO tokenURI
@@ -24,6 +23,11 @@ contract AuctionPosition is ERC721 {
         _mint(user, newItemId);
 
         return newItemId;
+    }
+
+    function setWinner(address addr) public {
+        require(msg.sender == factoryAddress, "Not factory");
+        winnerAddress = addr;
     }
 
     function burn(uint256 tokenId) external {

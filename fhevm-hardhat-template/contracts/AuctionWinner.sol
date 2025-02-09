@@ -11,9 +11,8 @@ contract AuctionWinner is Ownable, ERC721 {
     address private factoryAddress;
     address private assetAddress;
 
-    constructor(address _factoryAddress, address _assetAddress) Ownable(msg.sender) ERC721("AuctionWinner", "ACT-W") {
+    constructor(address _factoryAddress) Ownable(msg.sender) ERC721("AuctionWinner", "ACT-W") {
         factoryAddress = _factoryAddress;
-        assetAddress = _assetAddress;
     }
 
     // TODO tokenURI
@@ -23,6 +22,11 @@ contract AuctionWinner is Ownable, ERC721 {
         require(_tokenIds[auctionId] == false, "Win already claimed.");
         _mint(user, auctionId);
         // TODO burn position nft
+    }
+
+    function setAsset(address addr) public {
+        require(msg.sender == factoryAddress, 'Not factory');
+        assetAddress = addr;
     }
 
     function burn(uint256 tokenId) external {

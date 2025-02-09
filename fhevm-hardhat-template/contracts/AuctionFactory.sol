@@ -4,6 +4,7 @@ pragma solidity ^0.8.0;
 import "./ConfidentialAuction.sol";
 import { AuctionPosition } from "./AuctionPosition.sol";
 import { AuctionWinner } from "./AuctionWinner.sol";
+import { NFT } from "./asset/NFT.sol";
 
 enum AssetType {
     ERC20,
@@ -20,11 +21,23 @@ contract AuctionFactory {
     AuctionWinner winner;
 
     // TODO Config preset, expiration time
-    function createAuction(string memory name, AssetType assetType, uint256 settlePrice) public returns (address) {
+    function createAuction(
+        string memory name,
+        AssetType assetType,
+        uint256 settlePrice,
+        address assetAddress
+    ) public returns (address) {
         position = new AuctionPosition(address(this));
+        winner = new AuctionWinner(address(this));
+        if (assetAddress == address(0)) {
+            if (assetType == AssetType.ERC721) {
+                assetAddress = address(new NFT(name, name, address(position), address(winner)));
+            }
+        } 
+        position.setWinner(address(winner));
+        winner.setAsset(assetAddress);
         ConfidentialAuction auction = new ConfidentialAuction(_auctions.length, name, assetType, settlePrice);
         _auctions.push(auction);
-        winner = new AuctionWinner(address(this));
         emit AuctionCreated(address(auction), name, assetType);
         return address(auction);
     }
