@@ -24,4 +24,4 @@ Main page
 To make the auction truly confidential the EIP4337 standard was integrated into the workflow.
 Participants can claim  -->
 
-Permit2 signed and hashed, can be redeemed w/ a successfull auction win (ZK)
+<!-- Permit2 signed and hashed, can be redeemed w/ a successfull auction win (ZK) -->
