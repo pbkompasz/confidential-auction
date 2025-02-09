@@ -12,11 +12,7 @@ import { IConfidentialAuction } from "./interfaces/IConfidentialAuction.sol";
 import { AuctionPosition } from "./AuctionPosition.sol";
 import { AuctionWinner } from "./AuctionWinner.sol";
 import "fhevm/gateway/GatewayCaller.sol";
-import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
 
-// TODO
-// Mint NFT for auction winner
-// Users can trade NFTs and improve their positions
 contract ConfidentialAuction is
     IConfidentialAuction,
     Ownable,
@@ -35,11 +31,12 @@ contract ConfidentialAuction is
     bool private _isSettlePriceMet = false;
 
     // tokenId -> bidId
-    mapping(uint256 => uint256) private _nfts;
+    uint256[] private _nfts;
     Bid[] _bids;
-    uint256 _lastBid;
     // bidIds that won the auction
     Bid[] private _winnerBids;
+
+    DecryptedBid[] _decryptedBids;
 
     uint256 private _lastBidWinner;
 
@@ -57,12 +54,19 @@ contract ConfidentialAuction is
     // Last bid that was part of the calculations
     uint256 private _bidsCalculated;
 
+    // For some reason cannot modify a _total counter if it is defined here
+    euint4 private _secretMultiplier;
+    uint256 private _multipliedTotal;
     euint256 private _total;
 
     constructor(uint256 _id, string memory auctionName, AssetType assetType, uint256 _settlePrice) Ownable(tx.origin) {
         settlePrice = _settlePrice;
         id = _id;
-        // _total = TFHE.asEuint256(0);
+        _secretMultiplier = TFHE.randEuint4();
+        TFHE.allowThis(_secretMultiplier);
+        TFHE.allow(_secretMultiplier, msg.sender);
+
+        _total = TFHE.asEuint256(0);
         TFHE.allowThis(_total);
         TFHE.allow(_total, msg.sender);
 
@@ -119,13 +123,10 @@ contract ConfidentialAuction is
     ) external payable override activeAuction returns (uint256) {
         if (config.shouldLockFunds() && msg.value < config.lockAmount()) {
             console.log(config.lockAmount());
-            revert FundLockNotMet(Strings.toString(config.lockAmount()));
+            revert FundLockNotMet(config.lockAmount());
         }
 
-        euint256 encryptedSettlePrice;
-        if (_lastBid == 0) {
-            encryptedSettlePrice = TFHE.asEuint256(settlePrice);
-        }
+        euint256 encryptedSettlePrice = TFHE.asEuint256(settlePrice);
 
         // Expect euint256 values
         euint256 encryptedAmount = TFHE.asEuint256(amount, inputProof);
@@ -135,21 +136,21 @@ contract ConfidentialAuction is
         TFHE.allowThis(encryptedAmount);
         TFHE.allowThis(encryptedPricePer);
 
-        TFHE.allowThis(_total);
-        TFHE.allowTransient(encryptedSettlePrice, msg.sender);
+        TFHE.allowThis(encryptedSettlePrice);
         // Get the expected total amount to be paid
         euint256 encryptedAmountToPay = TFHE.mul(encryptedAmount, encryptedPricePer);
-        _total = TFHE.add(encryptedAmountToPay, _total);
-        ebool thresholdMet = TFHE.select(
-            TFHE.gt(_total, encryptedSettlePrice),
-            TFHE.asEbool(true),
-            TFHE.asEbool(false)
-        );
-        TFHE.allowThis(thresholdMet);
+        TFHE.allowThis(encryptedAmountToPay);
+        euint256 m = TFHE.mul(_secretMultiplier, encryptedAmountToPay);
+
+        // This fails w/ 'sender isn't allowed'
+        // Switched to multiplying the amountToPay w/ a random secret to hide the data
+        // I can check by multiplying the threshold w/ the secret and compare
+        TFHE.allowTransient(_total, address(msg.sender));
+        _total = TFHE.add(_total, encryptedAmountToPay);
 
         // Request to decrypt the total amount to be able to verify and confirm the bid
         uint256[] memory cts = new uint256[](1);
-        cts[0] = Gateway.toUint256(thresholdMet);
+        cts[0] = Gateway.toUint256(m);
         uint256 requestId = Gateway.requestDecryption(
             cts,
             this.gatewaydecryptBidTotalValue.selector,
@@ -170,10 +171,14 @@ contract ConfidentialAuction is
                 total: encryptedAmountToPay
             })
         );
-        _nfts[tokenId] = _bids.length - 1;
-        _lastBid = _bids.length - 1;
+        // WTF?
+        // This throws error 'sender isn't allowed'
+        // I think Bid struct contains encrypted values but I only want the length of the array?
+        // _lastBid = _bids.length - 1;
+        // _lastBid = tokenId;
 
-        console.log("ere");
+        _nfts.push(tokenId);
+
         emit BidCreated(msg.sender);
 
         return tokenId;
@@ -200,7 +205,7 @@ contract ConfidentialAuction is
     }
 
     function _calculateBidWinners() private {
-        _bidsCalculated = _lastBid;
+        _bidsCalculated = _nfts.length;
         _didWinnersCalculated = true;
 
         uint256[] memory cts = new uint256[](1);
@@ -230,10 +235,11 @@ contract ConfidentialAuction is
         }
     }
 
-    function _calculateBidWinners2() private {
+    function _calculateBidWinners2() public {
         uint256[] memory cts = new uint256[](1);
         euint256 encryptedSettlePrice;
         encryptedSettlePrice = TFHE.asEuint256(settlePrice);
+        euint256 _total = TFHE.asEuint256(0);
 
         for (uint256 i = 0; i < _winnerBids.length; i++) {
             _total = TFHE.add(_winnerBids[i].total, _total);
@@ -264,7 +270,7 @@ contract ConfidentialAuction is
     }
 
     function updateAuction() public override {
-        if (_bidsCalculated == _lastBid) {
+        if (_bidsCalculated == _nfts.length) {
             // Nothing to do
             return;
         }
@@ -283,16 +289,18 @@ contract ConfidentialAuction is
         require(success, "Call failed");
     }
 
-    function gatewaydecryptBidTotalValue(uint256 requestId, bool result) public onlyGateway {
+    function gatewaydecryptBidTotalValue(uint256 requestId, uint256 multipliedTotal_) public onlyGateway {
         // Due to async threshold has been met while decryption
         if (_isSettlePriceMet && config.shouldTerminateWhenSettlePricedMet()) {
             _refundBidder(requestId);
             return;
         }
-        if (result) {
-            updateAuction();
-            emit SettlePriceMet();
-        }
+        console.log("here");
+        _multipliedTotal += multipliedTotal_;
+        // if (result) {
+        //     updateAuction();
+        //     emit SettlePriceMet();
+        // }
         delete _decryptions[requestId];
         _decryptionsNo--;
     }
@@ -300,6 +308,8 @@ contract ConfidentialAuction is
     function gatewayDecryptAccounting(uint256 requestId, uint256 result) public onlyGateway {
         _winnerBids[result] = _bids[_accounting[requestId]];
         _pendingAccountingDecryptions -= 1;
+
+        console.log("accounting");
         if (_pendingAccountingDecryptions == 0) {
             _calculateBidWinners2();
         }
@@ -307,6 +317,7 @@ contract ConfidentialAuction is
 
     function gatewayDecryptWinners(uint256 requestId, bool result) public onlyGateway {
         _pendingAccountingDecryptions -= 1;
+        console.log("winner");
         if (result) {
             _didWinnersCalculated = true;
             _lastBidWinner = _accounting[requestId];
@@ -314,7 +325,7 @@ contract ConfidentialAuction is
         }
     }
 
-    function getAuction() external view override returns (AuctionStatus memory) {
+    function getAuction() external view returns (AuctionStatus memory) {
         return
             AuctionStatus(
                 _didAuctionFinish,
@@ -331,4 +342,11 @@ contract ConfidentialAuction is
     function getConfig() external view returns (address) {
         return address(config);
     }
+
+    function getDecryptedBid(uint256 tokenId) external view returns (DecryptedBid memory) {
+        uint256 bidId = _nfts[tokenId];
+        return _decryptedBids[bidId];
+    }
+
+    function gatewaydecryptMet(uint256 requestId, bool result) external {}
 }
