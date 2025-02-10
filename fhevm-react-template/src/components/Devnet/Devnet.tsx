@@ -36,6 +36,7 @@ export const Devnet = ({ account }: DevnetProps) => {
         .encrypt();
 
       console.log(`Took ${(Date.now() - now) / 1000}s`);
+      console.log(result);
       setHandles(result.handles);
       setEncryption(result.inputProof);
     } catch (e) {
