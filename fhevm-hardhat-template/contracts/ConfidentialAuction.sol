@@ -59,7 +59,7 @@ contract ConfidentialAuction is
     uint256 private _multipliedTotal;
     euint256 private _total;
 
-    constructor(uint256 _id, string memory auctionName, AssetType assetType, uint256 _settlePrice) Ownable(tx.origin) {
+    constructor(uint256 _id, string memory auctionName, AssetType assetType, uint256 _settlePrice, address position, address winner) Ownable(tx.origin) {
         settlePrice = _settlePrice;
         id = _id;
         _secretMultiplier = TFHE.randEuint4();
@@ -72,8 +72,8 @@ contract ConfidentialAuction is
 
         config = new AuctionConfig(address(this));
         parent = AuctionFactory(msg.sender);
-        positionNFT = parent.getPositionNFT();
-        winnerNFT = parent.getWinnerNFT();
+        positionNFT = AuctionPosition(position);
+        winnerNFT = AuctionWinner(winner);
     }
 
     modifier activeAuction() {
