@@ -20,11 +20,12 @@ contract Custom {
         ConfidentialAuction.DecryptedBid memory bid = auction.getDecryptedBid(tokenId);
 
         // Pay the amount
-        require(msg.value > bid.totalVisible, "Not enough msg.value");
+        uint256 total = bid.amount * bid.pricePer;
+        require(msg.value > total, "Not enough msg.value");
 
         // Burn winner NFT
         winnerNFT.burn(tokenId);
-        bytes memory data = abi.encodeWithSignature("_mint(uint256)", bid.amountVisible);
+        bytes memory data = abi.encodeWithSignature("_mint(uint256)", bid.amount);
 
         // Call the target contract
         (bool success, bytes memory result) = asset.call(data);

@@ -36,7 +36,7 @@ contract ConfidentialAuction is
     uint256[] private _nfts;
     Bid[] _bids;
     // bidIds that won the auction
-    Bid[] private _winnerBids;
+    mapping(uint256 => DecryptedBid) private _winnerBids;
 
     DecryptedBid[] _decryptedBids;
 
@@ -240,70 +240,6 @@ contract ConfidentialAuction is
     function _calculateBidWinners() private onlyOwner finishedAuction {
         _bidsCalculated = _nfts.length;
         _didWinnersCalculated = true;
-
-        uint256[] memory cts = new uint256[](1);
-        for (uint256 i = 0; i < _bids.length; i++) {
-            euint256 _t = TFHE.asEuint256(0);
-            TFHE.allowThis(_t);
-            // TFHE.allowTransient(_bids[i].total, msg.sender);
-            console.log("here");
-            for (uint256 j = 0; j < _lastBid; j++) {
-                // msg.owner which is the auction owner is allowed to these values, however the comparions throw 'Sender doesn't own lhs on op'
-                console.log(i, j, TFHE.isSenderAllowed(_bids[i].total), TFHE.isSenderAllowed(_bids[j].total));
-                // TFHE.allowThis(_bids[j].total);
-                if (i == j) {
-                    continue;
-                }
-                euint256 isBigger = TFHE.select(
-                    TFHE.gt(_bids[i].total, _bids[j].total),
-                    TFHE.asEuint256(1),
-                    TFHE.asEuint256(0)
-                );
-                _t = TFHE.add(_t, isBigger);
-            }
-
-            cts[0] = Gateway.toUint256(_t);
-            uint256 requestId = Gateway.requestDecryption(
-                cts,
-                this.gatewayDecryptAccounting.selector,
-                0,
-                block.timestamp + 100,
-                false
-            );
-            _pendingAccountingDecryptions += 1;
-            _accounting[requestId] = i;
-        }
-    }
-
-    /**
-     * @notice Iterate over the sorted bids(by total) and add up the values
-     * Each iteration checks if the added values meet the settel price
-     * If threshold met, we have the winning bids
-     */
-    function _calculateBidWinners2() public {
-        uint256[] memory cts = new uint256[](1);
-        euint256 encryptedSettlePrice;
-        encryptedSettlePrice = TFHE.asEuint256(settlePrice);
-        euint256 _t = TFHE.asEuint256(0);
-
-        for (uint256 i = 0; i < _winnerBids.length; i++) {
-            _t = TFHE.add(_winnerBids[i].total, _t);
-            ebool thresholdMet = TFHE.select(
-                TFHE.gt(_t, encryptedSettlePrice),
-                TFHE.asEbool(true),
-                TFHE.asEbool(false)
-            );
-            cts[0] = Gateway.toUint256(thresholdMet);
-            uint256 requestId = Gateway.requestDecryption(
-                cts,
-                this.gatewayDecryptWinners.selector,
-                0,
-                block.timestamp + 100,
-                false
-            );
-            _accounting[requestId] = i;
-            _pendingAccountingDecryptions += 1;
-        }
     }
 
     function _distributeWinnerNfts() private {
@@ -333,79 +269,63 @@ contract ConfidentialAuction is
     }
 
     /**
-     * @notice Refund bidder if erronously submitted a bid
-     * @dev This is necessary due to async decryption
-     * @param requestId Bid to refund
-     */
-    function _refundBidder(uint256 requestId) private {
-        address recipient = _decryptions[requestId];
-        // TODO msg.value -> bid.lockedAmount
-        (bool success, ) = recipient.call{ value: msg.value }("");
-        require(success, "Call failed");
-    }
-
-    /**
      *  @notice Gateway to decrypt if a single bid met the settel price
      * @param multipliedTotal_ Total multiplied by secret
      */
     function gatewaydecryptBidTotalValue(uint256 requestId, uint256 multipliedTotal_) public onlyGateway {
-        // Due to async threshold has been met while decryption
-
         _multipliedTotal += multipliedTotal_;
-        // TODO encrypt this ^ and decrypt to check if met
-        // if (_isSettlePriceMet && config.shouldTerminateWhenSettlePricedMet()) {
-        //     _refundBidder(requestId);
-        //     return;
-        // }
-        // if (result) {
-        //     updateAuction();
-        //     emit SettlePriceMet();
-        // }
+        euint256 encryptedTotal = TFHE.asEuint256(_multipliedTotal);
+        euint256 encryptedSettlePrice = TFHE.asEuint256(settlePrice);
+        ebool thresholdMet = TFHE.select(
+            TFHE.gt(encryptedTotal, TFHE.mul(encryptedSettlePrice, _secretMultiplier)),
+            TFHE.asEbool(true),
+            TFHE.asEbool(false)
+        );
+        uint256[] memory cts = new uint256[](1);
+        cts[0] = Gateway.toUint256(thresholdMet);
+        Gateway.requestDecryption(cts, this.gatewayDecryptThreshold.selector, 0, block.timestamp + 100, false);
+
         delete _decryptions[requestId];
         _decryptionsNo--;
     }
 
-    function _decryptWinnerBid(uint256 bidId) private {
-        uint256[] memory cts = new uint256[](1);
-        // TODO price = amount*pricePer - lockedAmount
-        // amount
-        cts[0] = Gateway.toUint256(_bids[bidId].);
-        uint256 requestId = Gateway.requestDecryption(
-            cts,
-            this.gatewaydecryptBidTotalValue.selector,
-            0,
-            block.timestamp + 100,
-            false
-        );
-        // TODO Move into gateway
-        // _distributeWinnerNft();
-    }
-
     /**
      *
-     * @notice Gateway to decrypt "accounting" values used to get winners
+     * @notice Check if bid met settle price
+     * @dev Refund bid if necessary
      */
-    function gatewayDecryptAccounting(uint256 requestId, uint256 result) public onlyGateway {
-        _winnerBids[result] = _bids[_accounting[requestId]];
-        _pendingAccountingDecryptions -= 1;
-
-        console.log("accounting");
-        if (_pendingAccountingDecryptions == 0) {
-            _calculateBidWinners2();
-        }
-    }
-
-    /**
-     *
-     * @notice Called by second step in winner calculation
-     */
-    function gatewayDecryptWinners(uint256 requestId, bool result) public onlyGateway {
-        _pendingAccountingDecryptions -= 1;
-        _decryptWinnerBid(_lastBidWinner);
+    function gatewayDecryptThreshold(uint256 requestId, bool result) public onlyGateway {
         if (result) {
-            _didWinnersCalculated = true;
-            _lastBidWinner = _accounting[requestId];
+            console.log("Settle price met");
+            updateAuction();
+            emit SettlePriceMet();
+            if (config.shouldTerminateWhenSettlePricedMet()) {
+                // _refundBidder(requestId);
+                _decryptBids();
+                return;
+            }
         }
+    }
+
+    function _decryptBids() private {
+        for (uint i = 0; i < _bids.length; i++) {
+            uint256[] memory cts = new uint256[](2);
+            cts[0] = Gateway.toUint256(_bids[i].amount);
+            cts[1] = Gateway.toUint256(_bids[i].pricePer);
+            uint256 requestId = Gateway.requestDecryption(
+                cts,
+                this.gatewayDecryptBid.selector,
+                0,
+                block.timestamp + 100,
+                false
+            );
+            _accounting[requestId];
+        }
+    }
+
+    function gatewayDecryptBid(uint256 requestId, uint256 amount, uint256 pricePer) public onlyGateway {
+        uint256 bidId = _accounting[requestId];
+        _winnerBids[bidId] = DecryptedBid({ amount: amount, pricePer: pricePer });
     }
 
     /**
@@ -443,9 +363,14 @@ contract ConfidentialAuction is
     }
 
     /**
-     *
-     * @notice Check if bid met settle price
-     * @dev Refund bid if necessary
+     * @notice Refund bidder if erronously submitted a bid
+     * @dev This is necessary due to async decryption
+     * @param requestId Bid to refund
      */
-    function gatewaydecryptMet(uint256 requestId, bool result) external {}
+    function _refundBidder(uint256 requestId) private {
+        address recipient = _decryptions[requestId];
+        // TODO msg.value -> bid.lockedAmount
+        (bool success, ) = recipient.call{ value: msg.value }("");
+        require(success, "Call failed");
+    }
 }

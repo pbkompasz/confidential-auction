@@ -25,8 +25,8 @@ interface IConfidentialAuction {
     }
 
     struct DecryptedBid {
-        uint256 totalVisible;
-        uint256 amountVisible;
+        uint256 pricePer;
+        uint256 amount;
     }
 
     struct AuctionStatus {
@@ -51,5 +51,4 @@ interface IConfidentialAuction {
 
     function updateAuction() external;
 
-    function gatewaydecryptBidTotalValue(uint256 requestId, uint256 result) external;
 }

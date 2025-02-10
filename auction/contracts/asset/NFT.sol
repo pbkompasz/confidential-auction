@@ -18,10 +18,11 @@ contract NFT is ERC721 {
         ConfidentialAuction.DecryptedBid memory bid = auction.getDecryptedBid(tokenId);
 
         // Pay the amount
-        require(msg.value > bid.totalVisible, "Not enough msg.value");
+        uint256 total = bid.amount * bid.pricePer;
+        require(msg.value > total, "Not enough msg.value");
 
         // Burn winner NFT
         winnerNFT.burn(tokenId);
-        _mint(msg.sender, bid.amountVisible);
+        _mint(msg.sender, bid.amount);
     }
 }

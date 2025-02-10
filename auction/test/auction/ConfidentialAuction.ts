@@ -194,14 +194,7 @@ describe("Confidential Auction", function () {
 
     await sleep(5000);
 
-    t = await this.auction.connect(this.signers.alice)._calculateBidWinners2();
-    await t.wait();
-
-    await sleep(5000);
-
     stats = await this.auction.getAuction();
-
-    console.log(stats);
 
     const contractFactory = await ethers.getContractFactory("AuctionPosition");
     // @ts-ignore
