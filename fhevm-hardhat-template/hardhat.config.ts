@@ -46,6 +46,7 @@ function getChainConfig(chain: keyof typeof chainIds): NetworkUserConfig {
       jsonRpcUrl = process.env.SEPOLIA_RPC_URL!;
   }
   return {
+    allowUnlimitedContractSize: true,
     accounts: {
       count: 10,
       mnemonic,
@@ -87,6 +88,7 @@ const config: HardhatUserConfig = {
   },
   networks: {
     hardhat: {
+      allowUnlimitedContractSize: true,
       accounts: {
         count: 10,
         mnemonic,
