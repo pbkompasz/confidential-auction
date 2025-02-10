@@ -7,30 +7,30 @@ import { AuctionFactory } from "./AuctionFactory.sol";
 import { ConfidentialAuction } from "./ConfidentialAuction.sol";
 
 contract AuctionWinner is Ownable, ERC721 {
-    mapping(uint256 => bool) _tokenIds;
+    mapping(uint256 => mapping(uint256 => bool)) private _tokenIds;
+    mapping(uint256 => address) private _assetAddresses;
     address private factoryAddress;
-    address private assetAddress;
 
     constructor(address _factoryAddress) Ownable(msg.sender) ERC721("AuctionWinner", "ACT-W") {
         factoryAddress = _factoryAddress;
     }
 
     // TODO tokenURI
-    function createWinner(address user, uint256 auctionId) public {
+    function createWinner(address user, uint256 auctionId, uint256 positionTokenId) public {
         ConfidentialAuction auctionOwner = AuctionFactory(factoryAddress).getAuction(auctionId);
         require(address(auctionOwner) == msg.sender, "Only auction can create bid positions.");
-        require(_tokenIds[auctionId] == false, "Win already claimed.");
+        require(_tokenIds[auctionId][positionTokenId] == false, "Win already claimed.");
         _mint(user, auctionId);
         // TODO burn position nft
     }
 
-    function setAsset(address addr) public {
-        require(msg.sender == factoryAddress, 'Not factory');
-        assetAddress = addr;
+    function setAsset(uint256 auctionId, address addr) public {
+        require(msg.sender == factoryAddress, "Not factory");
+        _assetAddresses[auctionId] = addr;
     }
 
     function burn(uint256 tokenId) external {
-        require(assetAddress == msg.sender, "Caller is not a burner or owner");
+        require(_assetAddresses[tokenId] == msg.sender, "Caller is not a burner or owner");
         _burn(tokenId);
     }
 }

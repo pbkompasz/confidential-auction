@@ -7,9 +7,9 @@ import { AuctionFactory } from "./AuctionFactory.sol";
 import { ConfidentialAuction } from "./ConfidentialAuction.sol";
 
 contract AuctionPosition is ERC721 {
-    mapping(uint256 => uint256) _tokenIds;
+    mapping(uint256 => uint256[]) private _tokenIds;
+    mapping(uint256 => address) private _winnerAddresses;
     address factoryAddress;
-    address winnerAddress;
 
     constructor(address _factoryAddress) ERC721("AuctionHouse", "ACT-P") {
         factoryAddress = _factoryAddress;
@@ -19,19 +19,19 @@ contract AuctionPosition is ERC721 {
     function createBidPosition(address user, uint256 auctionId) public returns (uint256) {
         ConfidentialAuction auctionOwner = AuctionFactory(factoryAddress).getAuction(auctionId);
         require(address(auctionOwner) == msg.sender, "Only auction can create bid positions.");
-        uint256 newItemId = _tokenIds[auctionId]++;
+        uint256 newItemId = _tokenIds[auctionId].push();
         _mint(user, newItemId);
 
         return newItemId;
     }
 
-    function setWinner(address addr) public {
+    function setWinner(uint256 tokenId, address addr) public {
         require(msg.sender == factoryAddress, "Not factory");
-        winnerAddress = addr;
+        _winnerAddresses[tokenId] = addr;
     }
 
     function burn(uint256 tokenId) external {
-        require(winnerAddress == msg.sender, "Caller is not a burner or owner");
+        require(_winnerAddresses[tokenId] == msg.sender, "Caller is not a burner or owner");
         _burn(tokenId);
     }
 }

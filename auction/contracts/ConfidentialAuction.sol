@@ -47,8 +47,8 @@ contract ConfidentialAuction is
     mapping(uint256 => address) private _decryptions;
     uint256 private _decryptionsNo;
 
-    uint256 settlePrice;
-    uint256 id;
+    uint256 private settlePrice;
+    uint256 private id;
 
     AuctionPosition positionNFT;
     AuctionWinner winnerNFT;
@@ -291,7 +291,7 @@ contract ConfidentialAuction is
 
     function _distributeWinnerNfts() private {
         for (uint256 i = 0; i < _lastBidWinner; i++) {
-            winnerNFT.createWinner(_bids[i].bidder, id);
+            winnerNFT.createWinner(_bids[i].bidder, id, _nfts[i]);
         }
         emit AuctionWinnersAnnounced();
         _didAuctionFinish = true;

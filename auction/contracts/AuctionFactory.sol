@@ -39,20 +39,19 @@ contract AuctionFactory {
             }
         }
 
-        // Set relations
-        position.setWinner(address(winner));
-        winner.setAsset(assetAddress);
-
         // TODO Config preset, expiration time
         // Create new auction
         ConfidentialAuction auction = new ConfidentialAuction(
             _auctions.length,
             name,
-            assetType,
             settlePrice,
             address(position),
             address(winner)
         );
+
+        // Set relations
+        position.setWinner(auction.getAuction().id, address(winner));
+        winner.setAsset(auction.getAuction().id, assetAddress);
 
         _auctions.push(auction);
         emit AuctionCreated(address(auction), name, assetType);

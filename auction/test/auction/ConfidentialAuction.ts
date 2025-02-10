@@ -100,7 +100,7 @@ describe("Confidential Auction", function () {
     await transaction.wait();
 
     const stats = await this.auction.getAuction();
-    expect(stats[5]).to.equal(1);
+    expect(stats[6]).to.equal(1);
   });
 
   it("should fail on config modification if _isConfigModifiable is false", async function () {
@@ -158,7 +158,7 @@ describe("Confidential Auction", function () {
   // Bob gets 400,000 tokens (min((1,000,000 - 600,000), 500,000) = 400,000),
   // David gets 0 token. The settlement price is 0.000002 ether.
   // Alice collects 0.000002 * 1,000,000 = 2 ethers.
-  it("should play the default scenario", async function () {
+  it("should run the default scenario", async function () {
     // Bob bids 0.000002 ether per token for 500,000 tokens,
     let input = this.fhevm.createEncryptedInput(await this.auction.getAddress(), this.signers.bob.address);
     const bobInputs = await input.add256(500_000).add256(2000000000000).encrypt(); // Encrypt the parameters
