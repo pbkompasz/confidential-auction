@@ -61,6 +61,8 @@ contract ConfidentialAuction is
     uint256 private _multipliedTotal;
     euint256 private _total;
 
+    uint256 private _lastBid = 0;
+
     uint256 private finalTokenPricePer;
 
     constructor(
@@ -185,6 +187,8 @@ contract ConfidentialAuction is
                 total: encryptedAmountToPay
             })
         );
+        TFHE.allow(_bids[_bids.length - 1].total, owner());
+        _lastBid += 1;
         // This throws error 'sender isn't allowed'
         // I think Bid struct contains encrypted values but I only want the length of the array?
         // _lastBid = _bids.length - 1;
@@ -231,15 +235,22 @@ contract ConfidentialAuction is
 
     /**
      * @notice Calculates the winners of the bid and the token price
+     * @dev Sort by total (i.e. amount*pricePer)
      */
-    function _calculateBidWinners() private finishedAuction {
+    function _calculateBidWinners() private onlyOwner finishedAuction {
         _bidsCalculated = _nfts.length;
         _didWinnersCalculated = true;
 
         uint256[] memory cts = new uint256[](1);
         for (uint256 i = 0; i < _bids.length; i++) {
-            euint256 _total = TFHE.asEuint256(0);
-            for (uint256 j = 0; j < _bids.length; j++) {
+            euint256 _t = TFHE.asEuint256(0);
+            TFHE.allowThis(_t);
+            // TFHE.allowTransient(_bids[i].total, msg.sender);
+            console.log("here");
+            for (uint256 j = 0; j < _lastBid; j++) {
+                // msg.owner which is the auction owner is allowed to these values, however the comparions throw 'Sender doesn't own lhs on op'
+                console.log(i, j, TFHE.isSenderAllowed(_bids[i].total), TFHE.isSenderAllowed(_bids[j].total));
+                // TFHE.allowThis(_bids[j].total);
                 if (i == j) {
                     continue;
                 }
@@ -248,9 +259,10 @@ contract ConfidentialAuction is
                     TFHE.asEuint256(1),
                     TFHE.asEuint256(0)
                 );
-                _total = TFHE.add(_total, isBigger);
+                _t = TFHE.add(_t, isBigger);
             }
-            cts[0] = Gateway.toUint256(_total);
+
+            cts[0] = Gateway.toUint256(_t);
             uint256 requestId = Gateway.requestDecryption(
                 cts,
                 this.gatewayDecryptAccounting.selector,
@@ -263,16 +275,21 @@ contract ConfidentialAuction is
         }
     }
 
+    /**
+     * @notice Iterate over the sorted bids(by total) and add up the values
+     * Each iteration checks if the added values meet the settel price
+     * If threshold met, we have the winning bids
+     */
     function _calculateBidWinners2() public {
         uint256[] memory cts = new uint256[](1);
         euint256 encryptedSettlePrice;
         encryptedSettlePrice = TFHE.asEuint256(settlePrice);
-        euint256 _total = TFHE.asEuint256(0);
+        euint256 _t = TFHE.asEuint256(0);
 
         for (uint256 i = 0; i < _winnerBids.length; i++) {
-            _total = TFHE.add(_winnerBids[i].total, _total);
+            _t = TFHE.add(_winnerBids[i].total, _t);
             ebool thresholdMet = TFHE.select(
-                TFHE.gt(_total, encryptedSettlePrice),
+                TFHE.gt(_t, encryptedSettlePrice),
                 TFHE.asEbool(true),
                 TFHE.asEbool(false)
             );
@@ -348,6 +365,22 @@ contract ConfidentialAuction is
         _decryptionsNo--;
     }
 
+    function _decryptWinnerBid(uint256 bidId) private {
+        uint256[] memory cts = new uint256[](1);
+        // TODO price = amount*pricePer - lockedAmount
+        // amount
+        cts[0] = Gateway.toUint256(_bids[bidId].);
+        uint256 requestId = Gateway.requestDecryption(
+            cts,
+            this.gatewaydecryptBidTotalValue.selector,
+            0,
+            block.timestamp + 100,
+            false
+        );
+        // TODO Move into gateway
+        // _distributeWinnerNft();
+    }
+
     /**
      *
      * @notice Gateway to decrypt "accounting" values used to get winners
@@ -368,11 +401,10 @@ contract ConfidentialAuction is
      */
     function gatewayDecryptWinners(uint256 requestId, bool result) public onlyGateway {
         _pendingAccountingDecryptions -= 1;
-        console.log("winner");
+        _decryptWinnerBid(_lastBidWinner);
         if (result) {
             _didWinnersCalculated = true;
             _lastBidWinner = _accounting[requestId];
-            _distributeWinnerNfts();
         }
     }
 
