@@ -30,6 +30,7 @@ interface IConfidentialAuction {
     }
 
     struct AuctionStatus {
+        string auctionName;
         bool didAuctionFinish;
         bool didAuctionStart;
         bool didAuctionTerminate;

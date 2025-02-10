@@ -23,6 +23,8 @@ contract ConfidentialAuction is
     AuctionConfig config;
     AuctionFactory parent;
 
+    string private auctionName;
+
     uint256 private endAuctionTime;
     bool private _didAuctionFinish = true;
     bool private _didAuctionStart = false;
@@ -59,7 +61,16 @@ contract ConfidentialAuction is
     uint256 private _multipliedTotal;
     euint256 private _total;
 
-    constructor(uint256 _id, string memory auctionName, AssetType assetType, uint256 _settlePrice, address position, address winner) Ownable(tx.origin) {
+    uint256 private finalTokenPricePer;
+
+    constructor(
+        uint256 _id,
+        string memory _auctionName,
+        uint256 _settlePrice,
+        address position,
+        address winner
+    ) Ownable(tx.origin) {
+        auctionName = _auctionName;
         settlePrice = _settlePrice;
         id = _id;
         _secretMultiplier = TFHE.randEuint4();
@@ -114,8 +125,12 @@ contract ConfidentialAuction is
         return _didAuctionStart;
     }
 
-    // Create a bid
-    // Mints a transferrable NFT
+    /**
+     *
+     * @notice Create a confidential bid
+     * @param amount Encrypted amounts of token
+     * @param pricePer Encrypted price per token
+     */
     function bid(
         einput amount,
         einput pricePer,
@@ -184,6 +199,9 @@ contract ConfidentialAuction is
         return tokenId;
     }
 
+    /**
+     * @notice Start auction, only called by owner
+     */
     function startAuction() public onlyOwner unstartedAuction {
         // Finalized config, if config modifiable will still be able to configure when auction is live
         config.finalizeConfig();
@@ -191,6 +209,9 @@ contract ConfidentialAuction is
         emit AuctionStarted(address(this));
     }
 
+    /**
+     * @notice Terminate auction, only called by owner
+     */
     function terminateAuction(string memory terminationMessage) public onlyOwner {
         // Finalized config, if config modifiable will still be able to configure when auction is live
         config.finalizeConfig();
@@ -198,13 +219,20 @@ contract ConfidentialAuction is
         emit AuctionTerminated(terminationMessage);
     }
 
+    /**
+     * @notice Finish auction, only called by owner
+     */
     function finishAuction() public onlyOwner activeAuction {
+        _didAuctionFinish = true;
         if (!_didWinnersCalculated) {
             _calculateBidWinners();
         }
     }
 
-    function _calculateBidWinners() private {
+    /**
+     * @notice Calculates the winners of the bid and the token price
+     */
+    function _calculateBidWinners() private finishedAuction {
         _bidsCalculated = _nfts.length;
         _didWinnersCalculated = true;
 
@@ -269,6 +297,10 @@ contract ConfidentialAuction is
         _didAuctionFinish = true;
     }
 
+    /**
+     * @notice Update auction state
+     * @dev Calls calculate bid winner
+     */
     function updateAuction() public override {
         if (_bidsCalculated == _nfts.length) {
             // Nothing to do
@@ -283,20 +315,31 @@ contract ConfidentialAuction is
         }
     }
 
+    /**
+     * @notice Refund bidder if erronously submitted a bid
+     * @dev This is necessary due to async decryption
+     * @param requestId Bid to refund
+     */
     function _refundBidder(uint256 requestId) private {
         address recipient = _decryptions[requestId];
+        // TODO msg.value -> bid.lockedAmount
         (bool success, ) = recipient.call{ value: msg.value }("");
         require(success, "Call failed");
     }
 
+    /**
+     *  @notice Gateway to decrypt if a single bid met the settel price
+     * @param multipliedTotal_ Total multiplied by secret
+     */
     function gatewaydecryptBidTotalValue(uint256 requestId, uint256 multipliedTotal_) public onlyGateway {
         // Due to async threshold has been met while decryption
-        if (_isSettlePriceMet && config.shouldTerminateWhenSettlePricedMet()) {
-            _refundBidder(requestId);
-            return;
-        }
-        console.log("here");
+
         _multipliedTotal += multipliedTotal_;
+        // TODO encrypt this ^ and decrypt to check if met
+        // if (_isSettlePriceMet && config.shouldTerminateWhenSettlePricedMet()) {
+        //     _refundBidder(requestId);
+        //     return;
+        // }
         // if (result) {
         //     updateAuction();
         //     emit SettlePriceMet();
@@ -305,6 +348,10 @@ contract ConfidentialAuction is
         _decryptionsNo--;
     }
 
+    /**
+     *
+     * @notice Gateway to decrypt "accounting" values used to get winners
+     */
     function gatewayDecryptAccounting(uint256 requestId, uint256 result) public onlyGateway {
         _winnerBids[result] = _bids[_accounting[requestId]];
         _pendingAccountingDecryptions -= 1;
@@ -315,6 +362,10 @@ contract ConfidentialAuction is
         }
     }
 
+    /**
+     *
+     * @notice Called by second step in winner calculation
+     */
     function gatewayDecryptWinners(uint256 requestId, bool result) public onlyGateway {
         _pendingAccountingDecryptions -= 1;
         console.log("winner");
@@ -325,9 +376,13 @@ contract ConfidentialAuction is
         }
     }
 
+    /**
+     * @notice Auction status getter
+     */
     function getAuction() external view returns (AuctionStatus memory) {
         return
             AuctionStatus(
+                auctionName,
                 _didAuctionFinish,
                 _didAuctionStart,
                 _didAuctionTerminate,
@@ -339,14 +394,26 @@ contract ConfidentialAuction is
             );
     }
 
+    /**
+     * @notice Get config address
+     */
     function getConfig() external view returns (address) {
         return address(config);
     }
 
+    /**
+     *
+     * @notice Get decrypted bid, after winners calculated
+     */
     function getDecryptedBid(uint256 tokenId) external view returns (DecryptedBid memory) {
         uint256 bidId = _nfts[tokenId];
         return _decryptedBids[bidId];
     }
 
+    /**
+     *
+     * @notice Check if bid met settle price
+     * @dev Refund bid if necessary
+     */
     function gatewaydecryptMet(uint256 requestId, bool result) external {}
 }
