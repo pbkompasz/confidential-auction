@@ -20,7 +20,8 @@ describe("Confidential Auction", function () {
     this.factory = contract;
     this.fhevm = await createInstance();
 
-    const transaction = await this.factory.createAuction("asd", 0n, 10_000n);
+    const { constants, expectRevert } = require("@openzeppelin/test-helpers");
+    const transaction = await this.factory.createAuction("asd", 0n, 10_000n, constants.ZERO_ADDRESS);
     await transaction.wait();
     const auction = await this.factory.getAuction(0);
 
@@ -30,8 +31,9 @@ describe("Confidential Auction", function () {
     this.auction = auctionContract;
   });
 
-  it.skip("should create auction", async function () {
-    const transaction = await this.factory.createAuction("asd", 0n, 10_000n);
+  it("should create auction", async function () {
+    const { constants, expectRevert } = require("@openzeppelin/test-helpers");
+    const transaction = await this.factory.createAuction("asd", 0n, 10_000n, constants.ZERO_ADDRESS);
     await transaction.wait();
     let auctionAddress;
     try {
@@ -44,7 +46,7 @@ describe("Confidential Auction", function () {
     }
   });
 
-  it.skip("should start auction and terminate it", async function () {
+  it("should start auction and terminate it", async function () {
     let transaction = await this.auction.startAuction();
     await transaction.wait();
 
@@ -58,7 +60,7 @@ describe("Confidential Auction", function () {
     } catch (error) {}
   });
 
-  it.skip("update config", async function () {
+  it("update config", async function () {
     let transaction = await this.auction.startAuction();
     await transaction.wait();
 
@@ -72,7 +74,7 @@ describe("Confidential Auction", function () {
     } catch (error) {}
   });
 
-  it.skip("should not update config after an auction started w/ finalized config", async function () {
+  it("should not update config after an auction started w/ finalized config", async function () {
     let transaction = await this.auction.startAuction();
     await transaction.wait();
 
@@ -86,14 +88,14 @@ describe("Confidential Auction", function () {
     } catch (error) {}
   });
 
-  it.skip("should start auction, 1 bid and terminate the auction", async function () {
+  it("should start auction, 1 bid and terminate the auction", async function () {
     let transaction = await this.auction.startAuction();
     await transaction.wait();
 
     const input = this.fhevm.createEncryptedInput(await this.auction.getAddress(), this.signers.bob.address);
     const inputs = await input.add256(64).add256(16).encrypt(); // Encrypt the parameters
 
-    await this.auction.connect(this.signers.bob).bid(inputs.handles[0], inputs.handles[1], inputs.inputProof);
+    await this.auction.connect(this.signers.bob).bid(inputs.handles[0], inputs.handles[1], inputs.inputProof, { value: 1000000000000000n });
     transaction = await this.auction.terminateAuction("Closed!");
     await transaction.wait();
 
@@ -101,7 +103,7 @@ describe("Confidential Auction", function () {
     expect(stats[5]).to.equal(1);
   });
 
-  it.skip("should fail on config modification if _isConfigModifiable is false", async function () {
+  it("should fail on config modification if _isConfigModifiable is false", async function () {
     const config = await this.auction.getConfig();
     expect(config).to.be.not.undefined;
 
@@ -128,7 +130,7 @@ describe("Confidential Auction", function () {
     }
   });
 
-  it.skip("should bid", async function () {
+  it("should bid", async function () {
     const input = this.fhevm.createEncryptedInput(await this.auction.getAddress(), this.signers.bob.address);
     const inputs = await input.add256(64).add256(16).encrypt(); // Encrypt the parameters
 
