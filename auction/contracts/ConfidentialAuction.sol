@@ -148,11 +148,6 @@ contract ConfidentialAuction is
         euint256 encryptedAmount = TFHE.asEuint256(amount, inputProof);
         euint256 encryptedPricePer = TFHE.asEuint256(pricePer, inputProof);
 
-        // Allow the smart contract to decrypt those data for the resolution phase
-        TFHE.allowThis(encryptedAmount);
-        TFHE.allowThis(encryptedPricePer);
-
-        TFHE.allowThis(encryptedSettlePrice);
         // Get the expected total amount to be paid
         euint256 encryptedAmountToPay = TFHE.mul(encryptedAmount, encryptedPricePer);
         TFHE.allowTransient(encryptedAmountToPay, address(msg.sender));
