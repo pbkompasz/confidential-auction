@@ -18,6 +18,7 @@ interface IConfidentialAuction {
 
     struct Bid {
         address bidder;
+        uint256 locked;
         uint256 bidTime;
         euint256 amount;
         euint256 pricePer;
@@ -25,6 +26,10 @@ interface IConfidentialAuction {
     }
 
     struct DecryptedBid {
+        uint256 bidId;
+        address bidder;
+        uint256 locked;
+        uint256 bidTime;
         uint256 pricePer;
         uint256 amount;
     }

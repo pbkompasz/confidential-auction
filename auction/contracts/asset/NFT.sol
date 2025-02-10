@@ -19,7 +19,7 @@ contract NFT is ERC721 {
 
         // Pay the amount
         uint256 total = bid.amount * bid.pricePer;
-        require(msg.value > total, "Not enough msg.value");
+        require(msg.value > total - bid.locked, "Not enough msg.value");
 
         // Burn winner NFT
         winnerNFT.burn(tokenId);

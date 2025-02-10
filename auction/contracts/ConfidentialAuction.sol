@@ -36,7 +36,7 @@ contract ConfidentialAuction is
     uint256[] private _nfts;
     Bid[] _bids;
     // bidIds that won the auction
-    mapping(uint256 => DecryptedBid) private _winnerBids;
+    DecryptedBid[] private _winnerBids;
 
     DecryptedBid[] _decryptedBids;
 
@@ -181,6 +181,7 @@ contract ConfidentialAuction is
         _bids.push(
             Bid({
                 bidder: msg.sender,
+                locked: msg.value,
                 bidTime: block.timestamp,
                 amount: encryptedAmount,
                 pricePer: encryptedPricePer,
@@ -243,9 +244,16 @@ contract ConfidentialAuction is
     }
 
     function _distributeWinnerNfts() private {
-        for (uint256 i = 0; i < _lastBidWinner; i++) {
-            winnerNFT.createWinner(_bids[i].bidder, id, _nfts[i]);
+        uint256 i = 0;
+        uint256 total = 0;
+        uint256 finalPricePer;
+        while (total < settlePrice) {
+            total += _winnerBids[i].amount * _winnerBids[i].pricePer;
+            winnerNFT.createWinner(_winnerBids[i].bidder, id, _nfts[_winnerBids[i].bidId]);
+            finalPricePer = _winnerBids[i].pricePer;
+            i++;
         }
+        finalTokenPricePer = finalPricePer;
         emit AuctionWinnersAnnounced();
         _didAuctionFinish = true;
     }
@@ -300,7 +308,7 @@ contract ConfidentialAuction is
             updateAuction();
             emit SettlePriceMet();
             if (config.shouldTerminateWhenSettlePricedMet()) {
-                // _refundBidder(requestId);
+                _refundBidder(requestId);
                 _decryptBids();
                 return;
             }
@@ -325,7 +333,38 @@ contract ConfidentialAuction is
 
     function gatewayDecryptBid(uint256 requestId, uint256 amount, uint256 pricePer) public onlyGateway {
         uint256 bidId = _accounting[requestId];
-        _winnerBids[bidId] = DecryptedBid({ amount: amount, pricePer: pricePer });
+        _winnerBids.push(
+            DecryptedBid({
+                bidId: bidId,
+                bidder: _bids[bidId].bidder,
+                locked: _bids[bidId].locked,
+                bidTime: _bids[bidId].bidTime,
+                amount: amount,
+                pricePer: pricePer
+            })
+        );
+
+        if (_winnerBids.length == _bids.length) {
+            _sortWinningBids();
+            _distributeWinnerNfts();
+        }
+    }
+
+    function _sortWinningBids() private {
+        uint256 len = _winnerBids.length;
+        for (uint256 i = 0; i < len; i++) {
+            for (uint256 j = 0; j < len - 1; j++) {
+                uint256 valueA = _winnerBids[j].amount * _winnerBids[j].pricePer;
+                uint256 valueB = _winnerBids[j + 1].amount * _winnerBids[j + 1].pricePer;
+
+                // Swap if the next bid has a higher value
+                if (valueB > valueA) {
+                    DecryptedBid memory temp = _winnerBids[j];
+                    _winnerBids[j] = _winnerBids[j + 1];
+                    _winnerBids[j + 1] = temp;
+                }
+            }
+        }
     }
 
     /**
@@ -360,6 +399,10 @@ contract ConfidentialAuction is
     function getDecryptedBid(uint256 tokenId) external view returns (DecryptedBid memory) {
         uint256 bidId = _nfts[tokenId];
         return _decryptedBids[bidId];
+    }
+
+    function getFinalTokenPricePer() external view returns (uint256) {
+        return finalTokenPricePer;
     }
 
     /**
