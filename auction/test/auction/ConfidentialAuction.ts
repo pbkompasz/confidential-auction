@@ -95,7 +95,9 @@ describe("Confidential Auction", function () {
     const input = this.fhevm.createEncryptedInput(await this.auction.getAddress(), this.signers.bob.address);
     const inputs = await input.add256(64).add256(16).encrypt(); // Encrypt the parameters
 
-    await this.auction.connect(this.signers.bob).bid(inputs.handles[0], inputs.handles[1], inputs.inputProof, { value: 1000000000000000n });
+    await this.auction
+      .connect(this.signers.bob)
+      .bid(inputs.handles[0], inputs.handles[1], inputs.inputProof, { value: 1000000000000000n });
     transaction = await this.auction.terminateAuction("Closed!");
     await transaction.wait();
 
@@ -184,8 +186,6 @@ describe("Confidential Auction", function () {
       .bid(davidInputs.handles[0], davidInputs.handles[1], davidInputs.inputProof, { value: 1000000000000000n });
 
     let stats = await this.auction.getAuction();
-
-    console.log(stats);
 
     let t = await this.auction.connect(this.signers.alice).finishAuction();
     await t.wait();

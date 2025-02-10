@@ -161,7 +161,7 @@ contract ConfidentialAuction is
         // This fails w/ 'sender isn't allowed'
         // Switched to multiplying the amountToPay w/ a random secret to hide the data
         // I can check by multiplying the threshold w/ the secret and compare
-        // TFHE.allowTransient(_total, address(msg.sender));
+        // TFHE.allowTransient(_total, msg.sender);
         // _total = TFHE.add(_total, encryptedAmountToPay);
 
         // Request to decrypt the total amount to be able to verify and confirm the bid
@@ -190,18 +190,12 @@ contract ConfidentialAuction is
         );
         TFHE.allow(_bids[_bids.length - 1].total, owner());
         _lastBid += 1;
-        // This throws error 'sender isn't allowed'
-        // I think Bid struct contains encrypted values but I only want the length of the array?
-        // _lastBid = _bids.length - 1;
-        // _lastBid = tokenId;
 
         _nfts.push(tokenId);
 
         emit BidCreated(msg.sender);
 
         return tokenId;
-
-        return 1;
     }
 
     /**
