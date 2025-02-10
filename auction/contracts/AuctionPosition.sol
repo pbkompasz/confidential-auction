@@ -1,6 +1,7 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity ^0.8.0;
 
+import "hardhat/console.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { ERC721 } from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import { AuctionFactory } from "./AuctionFactory.sol";
@@ -19,8 +20,10 @@ contract AuctionPosition is ERC721 {
     function createBidPosition(address user, uint256 auctionId) public returns (uint256) {
         ConfidentialAuction auctionOwner = AuctionFactory(factoryAddress).getAuction(auctionId);
         require(address(auctionOwner) == msg.sender, "Only auction can create bid positions.");
-        uint256 newItemId = _tokenIds[auctionId].push();
-        _mint(user, newItemId);
+        _tokenIds[auctionId].push();
+        uint256 newItemId = _tokenIds[auctionId].length;
+
+        _mint(user, _tokenIds[auctionId].length);
 
         return newItemId;
     }

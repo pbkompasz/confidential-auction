@@ -108,7 +108,7 @@ contract ConfidentialAuction is
     }
 
     modifier finishedAuction() {
-        if (block.timestamp >= config.finishTime() || _didAuctionFinish) {
+        if (block.timestamp < config.finishTime() && !_didAuctionFinish) {
             revert NotFinishedAuction();
         }
         _;
@@ -137,7 +137,6 @@ contract ConfidentialAuction is
         bytes calldata inputProof
     ) external payable override activeAuction returns (uint256) {
         if (config.shouldLockFunds() && msg.value < config.lockAmount()) {
-            console.log(config.lockAmount());
             revert FundLockNotMet(config.lockAmount());
         }
 
@@ -154,14 +153,14 @@ contract ConfidentialAuction is
         TFHE.allowThis(encryptedSettlePrice);
         // Get the expected total amount to be paid
         euint256 encryptedAmountToPay = TFHE.mul(encryptedAmount, encryptedPricePer);
-        TFHE.allowThis(encryptedAmountToPay);
+        TFHE.allowTransient(encryptedAmountToPay, address(msg.sender));
         euint256 m = TFHE.mul(_secretMultiplier, encryptedAmountToPay);
 
         // This fails w/ 'sender isn't allowed'
         // Switched to multiplying the amountToPay w/ a random secret to hide the data
         // I can check by multiplying the threshold w/ the secret and compare
-        TFHE.allowTransient(_total, address(msg.sender));
-        _total = TFHE.add(_total, encryptedAmountToPay);
+        // TFHE.allowTransient(_total, address(msg.sender));
+        // _total = TFHE.add(_total, encryptedAmountToPay);
 
         // Request to decrypt the total amount to be able to verify and confirm the bid
         uint256[] memory cts = new uint256[](1);
@@ -186,7 +185,6 @@ contract ConfidentialAuction is
                 total: encryptedAmountToPay
             })
         );
-        // WTF?
         // This throws error 'sender isn't allowed'
         // I think Bid struct contains encrypted values but I only want the length of the array?
         // _lastBid = _bids.length - 1;
@@ -197,6 +195,8 @@ contract ConfidentialAuction is
         emit BidCreated(msg.sender);
 
         return tokenId;
+
+        return 1;
     }
 
     /**
