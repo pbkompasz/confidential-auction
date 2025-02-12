@@ -142,8 +142,6 @@ contract ConfidentialAuction is
             revert FundLockNotMet(config.lockAmount());
         }
 
-        euint256 encryptedSettlePrice = TFHE.asEuint256(settlePrice);
-
         // Expect euint256 values
         euint256 encryptedAmount = TFHE.asEuint256(amount, inputProof);
         euint256 encryptedPricePer = TFHE.asEuint256(pricePer, inputProof);
