@@ -179,11 +179,13 @@ contract ConfidentialAuction is
                 locked: msg.value,
                 bidTime: block.timestamp,
                 amount: encryptedAmount,
-                pricePer: encryptedPricePer,
-                total: encryptedAmountToPay
+                pricePer: encryptedPricePer
             })
         );
-        TFHE.allow(_bids[_bids.length - 1].total, owner());
+
+        // Allow contract owner to decrypt total and price
+        TFHE.allow(_bids[_bids.length - 1].amount, owner());
+        TFHE.allow(_bids[_bids.length - 1].pricePer, owner());
         _lastBid += 1;
 
         _nfts.push(tokenId);
@@ -230,6 +232,7 @@ contract ConfidentialAuction is
     function _calculateBidWinners() private onlyOwner finishedAuction {
         _bidsCalculated = _nfts.length;
         _didWinnersCalculated = true;
+        _decryptBids();
     }
 
     function _distributeWinnerNfts() private {
@@ -272,6 +275,10 @@ contract ConfidentialAuction is
     function gatewaydecryptBidTotalValue(uint256 requestId, uint256 multipliedTotal_) public onlyGateway {
         _multipliedTotal += multipliedTotal_;
         euint256 encryptedTotal = TFHE.asEuint256(_multipliedTotal);
+        // Instead of adding up the values and storing it in a global variable,
+        // we multiply each value by a secret value and decrypt the value (amount * pricePer * secret) and add to the total in plaintext
+        // This does not leak the value, since the comparison happens under FHE, but it is less efficient
+        // I was unable to update a global euint256 "sender isn't allowed"
         euint256 encryptedSettlePrice = TFHE.asEuint256(settlePrice);
         ebool thresholdMet = TFHE.select(
             TFHE.gt(encryptedTotal, TFHE.mul(encryptedSettlePrice, _secretMultiplier)),
@@ -304,7 +311,7 @@ contract ConfidentialAuction is
         }
     }
 
-    function _decryptBids() private {
+    function _decryptBids() private onlyOwner finishedAuction {
         for (uint i = 0; i < _bids.length; i++) {
             uint256[] memory cts = new uint256[](2);
             cts[0] = Gateway.toUint256(_bids[i].amount);
