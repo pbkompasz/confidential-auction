@@ -190,10 +190,6 @@ describe("Confidential Auction", function () {
     let t = await this.auction.connect(this.signers.alice).finishAuction();
     await t.wait();
 
-    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-    await sleep(5000);
-
     stats = await this.auction.getAuction();
 
     const contractFactory = await ethers.getContractFactory("AuctionPosition");
@@ -202,7 +198,8 @@ describe("Confidential Auction", function () {
       .connect(this.signers.alice)
       .attach(await this.factory.getPositionNFT());
     // @ts-expect-error Inherited methods not found
-    console.log(await winnerContract.ownerOf(1));
+    expect(await winnerContract.ownerOf(1)).to.be.not.undefined;
+    expect(await this.auction.getFinalTokenPricePer()).to.be.greaterThan(0);
   });
 
   // The final winner calculation is broken down into multiple decryption and summarization steps
