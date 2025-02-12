@@ -22,7 +22,6 @@ interface IConfidentialAuction {
         uint256 bidTime;
         euint256 amount;
         euint256 pricePer;
-        euint256 total;
     }
 
     struct DecryptedBid {
